@@ -40,6 +40,7 @@
             text-anchor: middle;
             dominant-baseline: middle;
             user-select: none;
+            font-size: 1rem;
         }
 
         .dark .node-text {
@@ -61,16 +62,41 @@
 
         #canvas-container {
             touch-action: none;
+            /* Prevent default touch actions like scrolling when interacting with SVG */
+            min-height: 400px;
+            /* Ensure container has a minimum height */
+            position: relative;
+            /* Needed for absolute positioning if used later */
+            overflow: hidden;
+            /* Clip content exceeding bounds, rely on SVG pan/zoom */
+            border: 1px solid #e2e8f0;
+            /* Optional: add border for clarity */
+        }
+
+        .dark #canvas-container {
+            border: 1px solid #4a5568;
+        }
+
+        #rbTreeCanvas {
+            display: block;
+            /* Remove extra space below SVG */
+            width: 100%;
+            height: 100%;
+            /* Make SVG fill the container */
+            cursor: grab;
+        }
+
+        #rbTreeCanvas:active {
+            cursor: grabbing;
         }
     </style>
 </head>
 
-<body class="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen">
-    <div class="container mx-auto px-4 py-8">
+<body class="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen flex flex-col">
+    <div class="container mx-auto px-4 py-8 flex-grow">
         <h1 class="text-3xl font-bold text-center mb-6">Red-Black Tree Visualization</h1>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <!-- Controls Section -->
             <div class="md:col-span-1 bg-gray-100 dark:bg-gray-800 p-4 rounded-lg shadow">
                 <h2 class="text-xl font-semibold mb-4">Controls</h2>
 
@@ -115,14 +141,13 @@
                 <div id="status" class="mt-4 p-2 bg-gray-200 dark:bg-gray-700 rounded-md min-h-10 hidden"></div>
             </div>
 
-            <!-- Visualization Section -->
-            <div class="md:col-span-2 bg-gray-100 dark:bg-gray-800 p-4 rounded-lg shadow">
+            <div class="md:col-span-2 bg-gray-100 dark:bg-gray-800 p-4 rounded-lg shadow flex flex-col">
                 <h2 class="text-xl font-semibold mb-4">Tree Visualization</h2>
-                <div id="canvas-container" class="w-full overflow-auto bg-white dark:bg-gray-700 rounded-lg">
-                    <svg id="rbTreeCanvas" width="100%" height="400" class="mx-auto"></svg>
+                <div id="canvas-container" class="flex-grow w-full bg-white dark:bg-gray-700 rounded-lg">
+                    <svg id="rbTreeCanvas"></svg>
                 </div>
                 <div class="flex justify-center mt-4 space-x-2">
-                    <button id="zoomInBtn"
+                    <button id="zoomInBtn" title="Zoom In"
                         class="bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 px-3 py-1 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
@@ -130,21 +155,20 @@
                                 d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                         </svg>
                     </button>
-                    <button id="zoomOutBtn"
+                    <button id="zoomOutBtn" title="Zoom Out"
                         class="bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 px-3 py-1 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 12H6" />
                         </svg>
                     </button>
-                    <button id="resetViewBtn"
+                    <button id="resetViewBtn" title="Reset View"
                         class="bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 px-3 py-1 rounded-md">
                         Reset View
                     </button>
                 </div>
             </div>
 
-            <!-- Info Section -->
             <div class="md:col-span-3 bg-gray-100 dark:bg-gray-800 p-4 rounded-lg shadow">
                 <h2 class="text-xl font-semibold mb-4">Red-Black Tree Properties</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -162,11 +186,10 @@
                     <div>
                         <h3 class="font-semibold mb-2">Balancing Operations:</h3>
                         <ul class="list-disc pl-5 space-y-1">
-                            <li>Color changes: Flip the colors of nodes to maintain the red-black properties</li>
-                            <li>Left rotation: Reorganizes the tree structure by rotating nodes to the left</li>
-                            <li>Right rotation: Reorganizes the tree structure by rotating nodes to the right</li>
-                            <li>These operations ensure the tree remains balanced, providing O(log n) search, insert,
-                                and delete operations</li>
+                            <li>Color changes</li>
+                            <li>Left rotation</li>
+                            <li>Right rotation</li>
+                            <li>These operations ensure O(log n) time complexity for search, insert, and delete</li>
                         </ul>
                     </div>
                 </div>
@@ -175,9 +198,10 @@
     </div>
 
     <script>
-        // Initialize dark mode
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            document.documentElement.classList.add('dark');
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark')
+        } else {
+            document.documentElement.classList.remove('dark')
         }
 
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
@@ -186,23 +210,28 @@
             } else {
                 document.documentElement.classList.remove('dark');
             }
+            visualizer?.updateView(); // Redraw to apply color changes
         });
 
-        // Red-Black Tree Implementation
+
         class Node {
             constructor(value) {
                 this.value = value;
-                this.color = "RED"; // New nodes are always red
-                this.left = null;
-                this.right = null;
-                this.parent = null;
+                this.color = "RED";
+                this.left = null; // Will be set to NIL
+                this.right = null; // Will be set to NIL
+                this.parent = null; // Will be set during insertion or rotation
             }
         }
 
         class RedBlackTree {
             constructor() {
-                this.root = null;
-                this.NIL = { color: "BLACK", left: null, right: null, parent: null, value: null };
+                this.NIL = { color: "BLACK", left: null, right: null, parent: null, value: null, isNIL: true };
+                // Setting NIL's children/parent to itself can sometimes simplify checks, but null is also fine if handled. Let's keep null.
+                this.NIL.left = this.NIL;
+                this.NIL.right = this.NIL;
+                this.NIL.parent = this.NIL; // Parent of NIL isn't really used, but consistency helps
+                this.root = this.NIL;
                 this.nodeCount = 0;
             }
 
@@ -210,226 +239,147 @@
                 let newNode = new Node(value);
                 newNode.left = this.NIL;
                 newNode.right = this.NIL;
+                newNode.parent = null; // Parent determined below
 
-                if (this.root === null) {
-                    this.root = newNode;
-                    newNode.color = "BLACK";
-                    newNode.parent = null;
-                    this.nodeCount++;
-                    return;
-                }
+                let y = null; // Trailing pointer for parent
+                let x = this.root; // Current node
 
-                let current = this.root;
-                let parent = null;
-
-                // Find the position to insert
-                while (current !== this.NIL && current !== null) {
-                    parent = current;
-                    if (newNode.value < current.value) {
-                        current = current.left;
-                    } else if (newNode.value > current.value) {
-                        current = current.right;
+                while (x !== this.NIL) {
+                    y = x;
+                    if (newNode.value < x.value) {
+                        x = x.left;
+                    } else if (newNode.value > x.value) {
+                        x = x.right;
                     } else {
-                        // Value already exists, do nothing
-                        return;
+                        return; // Value already exists, do nothing
                     }
                 }
 
-                // Link new node to its parent
-                newNode.parent = parent;
-                if (newNode.value < parent.value) {
-                    parent.left = newNode;
+                newNode.parent = y; // Link new node to its parent
+                if (y === null) { // Tree was empty
+                    this.root = newNode;
+                } else if (newNode.value < y.value) {
+                    y.left = newNode;
                 } else {
-                    parent.right = newNode;
+                    y.right = newNode;
                 }
 
                 this.nodeCount++;
 
-                // Fix Red-Black Tree properties
+                // New node is RED by default. Check for violations.
+                if (newNode.parent === null) { // Inserted as root
+                    newNode.color = "BLACK"; // Root must be black
+                    return;
+                }
+
+                // If parent is root (grandparent is null), no red-red violation possible yet
+                if (newNode.parent.parent === null) {
+                    return;
+                }
+
+                // Perform fixup if needed (parent is RED)
                 this.fixInsert(newNode);
             }
 
-            fixInsert(node) {
-                let parent = null;
-                let grandParent = null;
-
-                // While parent is RED (violating red-red property)
-                while (node !== this.root && node.parent.color === "RED") {
-                    parent = node.parent;
-                    grandParent = parent.parent;
-
-                    if (grandParent === null) {
+            fixInsert(k) {
+                let u; // Uncle node
+                // Loop while parent is RED (violates property 4)
+                // k.parent check is safe because root's parent is null (checked in insert)
+                // k.parent.parent check is safe because child-of-root case is handled in insert
+                while (k.parent.color === "RED") {
+                    // Parent is the right child of grandparent
+                    if (k.parent === k.parent.parent.right) {
+                        u = k.parent.parent.left; // Uncle
+                        if (u.color === "RED") {
+                            // Case 1: Uncle is RED -> Recolor parent, uncle, grandparent
+                            u.color = "BLACK";
+                            k.parent.color = "BLACK";
+                            k.parent.parent.color = "RED";
+                            k = k.parent.parent; // Move up to grandparent to check further
+                        } else {
+                            // Case 2 & 3: Uncle is BLACK
+                            if (k === k.parent.left) {
+                                // Case 2: k is left child (triangle) -> Rotate parent right
+                                k = k.parent;
+                                this.rightRotate(k);
+                                // After rotation, k points to the original child node (now the lower node)
+                                // k.parent is now the original grandparent
+                            }
+                            // Case 3: k is right child (line) -> Recolor and rotate grandparent left
+                            // This also handles Case 2 after the rotation
+                            k.parent.color = "BLACK"; // New parent (original grandparent or original parent after rotation)
+                            k.parent.parent.color = "RED"; // New grandparent (original great-grandparent or original grandparent's parent)
+                            this.leftRotate(k.parent.parent);
+                        }
+                    } else { // Parent is the left child of grandparent
+                        u = k.parent.parent.right; // Uncle
+                        if (u.color === "RED") {
+                            // Case 1: Uncle is RED -> Recolor parent, uncle, grandparent
+                            u.color = "BLACK";
+                            k.parent.color = "BLACK";
+                            k.parent.parent.color = "RED";
+                            k = k.parent.parent; // Move up
+                        } else {
+                            // Case 2 & 3: Uncle is BLACK
+                            if (k === k.parent.right) {
+                                // Case 2: k is right child (triangle) -> Rotate parent left
+                                k = k.parent;
+                                this.leftRotate(k);
+                            }
+                            // Case 3: k is left child (line) -> Recolor and rotate grandparent right
+                            k.parent.color = "BLACK";
+                            k.parent.parent.color = "RED";
+                            this.rightRotate(k.parent.parent);
+                        }
+                    }
+                    // If k moved up to the root, exit loop
+                    if (k === this.root) {
                         break;
                     }
-
-                    // Parent is left child of grandparent
-                    if (parent === grandParent.left) {
-                        let uncle = grandParent.right;
-
-                        // Case 1: Uncle is RED - recolor
-                        if (uncle !== this.NIL && uncle !== null && uncle.color === "RED") {
-                            grandParent.color = "RED";
-                            parent.color = "BLACK";
-                            uncle.color = "BLACK";
-                            node = grandParent; // Move up to grandparent
-                        } else {
-                            // Case 2: Node is right child - left rotation
-                            if (node === parent.right) {
-                                node = parent;
-                                this.leftRotate(node);
-                                parent = node.parent;
-                            }
-
-                            // Case 3: Node is left child - right rotation
-                            parent.color = "BLACK";
-                            grandParent.color = "RED";
-                            this.rightRotate(grandParent);
-                        }
-                    } else { // Parent is right child of grandparent
-                        let uncle = grandParent.left;
-
-                        // Case 1: Uncle is RED - recolor
-                        if (uncle !== this.NIL && uncle !== null && uncle.color === "RED") {
-                            grandParent.color = "RED";
-                            parent.color = "BLACK";
-                            uncle.color = "BLACK";
-                            node = grandParent; // Move up to grandparent
-                        } else {
-                            // Case 2: Node is left child - right rotation
-                            if (node === parent.left) {
-                                node = parent;
-                                this.rightRotate(node);
-                                parent = node.parent;
-                            }
-
-                            // Case 3: Node is right child - left rotation
-                            parent.color = "BLACK";
-                            grandParent.color = "RED";
-                            this.leftRotate(grandParent);
-                        }
-                    }
                 }
-
-                // Ensure root is black
+                // Ensure root is always black (Property 2)
                 this.root.color = "BLACK";
             }
 
+
             leftRotate(x) {
-                let y = x.right;
-                x.right = y.left;
-
-                if (y.left !== this.NIL && y.left !== null) {
-                    y.left.parent = x;
+                let y = x.right; // Set y
+                x.right = y.left; // Turn y's left subtree into x's right subtree
+                if (y.left !== this.NIL) {
+                    y.left.parent = x; // Update parent pointer of y's left child
                 }
-
-                y.parent = x.parent;
-
-                if (x.parent === null) {
+                y.parent = x.parent; // Link y's parent to x's parent
+                if (x.parent === null) { // x was root
                     this.root = y;
-                } else if (x === x.parent.left) {
+                } else if (x === x.parent.left) { // x was left child
                     x.parent.left = y;
-                } else {
+                } else { // x was right child
                     x.parent.right = y;
                 }
-
-                y.left = x;
-                x.parent = y;
+                y.left = x; // Put x on y's left
+                x.parent = y; // Set x's parent to y
             }
 
-            rightRotate(y) {
-                let x = y.left;
-                y.left = x.right;
-
-                if (x.right !== this.NIL && x.right !== null) {
-                    x.right.parent = y;
+            rightRotate(x) {
+                let y = x.left; // Set y
+                x.left = y.right; // Turn y's right subtree into x's left subtree
+                if (y.right !== this.NIL) {
+                    y.right.parent = x; // ***** CORRECTED LINE ***** Update parent pointer
                 }
-
-                x.parent = y.parent;
-
-                if (y.parent === null) {
-                    this.root = x;
-                } else if (y === y.parent.left) {
-                    y.parent.left = x;
-                } else {
-                    y.parent.right = x;
+                y.parent = x.parent; // Link y's parent to x's parent
+                if (x.parent === null) { // x was root
+                    this.root = y;
+                } else if (x === x.parent.right) { // x was right child
+                    x.parent.right = y;
+                } else { // x was left child
+                    x.parent.left = y;
                 }
-
-                x.right = y;
-                y.parent = x;
-            }
-
-            find(value) {
-                let current = this.root;
-
-                while (current !== this.NIL && current !== null) {
-                    if (value === current.value) {
-                        return current;
-                    }
-
-                    if (value < current.value) {
-                        current = current.left;
-                    } else {
-                        current = current.right;
-                    }
-                }
-
-                return null;
-            }
-
-            delete(value) {
-                let node = this.find(value);
-
-                if (node === null) {
-                    return false; // Node not found
-                }
-
-                this.nodeCount--;
-                this.deleteNode(node);
-                return true;
-            }
-
-            deleteNode(z) {
-                let y = z;
-                let yOriginalColor = y.color;
-                let x;
-
-                if (z.left === this.NIL || z.left === null) {
-                    x = z.right;
-                    this.transplant(z, z.right);
-                } else if (z.right === this.NIL || z.right === null) {
-                    x = z.left;
-                    this.transplant(z, z.left);
-                } else {
-                    y = this.minimum(z.right);
-                    yOriginalColor = y.color;
-                    x = y.right;
-
-                    if (y.parent === z) {
-                        if (x !== this.NIL && x !== null) {
-                            x.parent = y;
-                        }
-                    } else {
-                        this.transplant(y, y.right);
-                        y.right = z.right;
-                        if (y.right !== this.NIL && y.right !== null) {
-                            y.right.parent = y;
-                        }
-                    }
-
-                    this.transplant(z, y);
-                    y.left = z.left;
-                    if (y.left !== this.NIL && y.left !== null) {
-                        y.left.parent = y;
-                    }
-                    y.color = z.color;
-                }
-
-                if (yOriginalColor === "BLACK") {
-                    this.fixDelete(x);
-                }
+                y.right = x; // Put x on y's right
+                x.parent = y; // Set x's parent to y
             }
 
             transplant(u, v) {
+                // Replaces subtree rooted at u with subtree rooted at v
                 if (u.parent === null) {
                     this.root = v;
                 } else if (u === u.parent.left) {
@@ -437,119 +387,189 @@
                 } else {
                     u.parent.right = v;
                 }
-
-                if (v !== this.NIL && v !== null) {
+                // Set parent of v only if v is not NIL
+                // Note: v might be NIL, NIL.parent points to NIL (or null if defined differently)
+                // The check v !== this.NIL correctly handles this.
+                if (v !== this.NIL) {
                     v.parent = u.parent;
                 }
             }
 
+
             minimum(node) {
-                while (node.left !== this.NIL && node.left !== null) {
+                // Finds the node with the minimum value in the subtree rooted at node
+                while (node.left !== this.NIL) {
                     node = node.left;
                 }
                 return node;
             }
 
-            fixDelete(x) {
-                while (x !== this.root && (x === this.NIL || x === null || x.color === "BLACK")) {
-                    if (x === null || x.parent === null) {
-                        break;
+            deleteNodeHelper(node, key) {
+                // Finds the node with the given key starting from 'node'
+                let z = this.NIL; // Node to be deleted
+                let searchNode = node; // Use a separate var for searching
+                while (searchNode !== this.NIL) {
+                    if (searchNode.value === key) {
+                        z = searchNode;
+                        break; // Found node to delete
                     }
-
-                    if (x === x.parent.left) {
-                        let w = x.parent.right;
-
-                        if (w === null) {
-                            break;
-                        }
-
-                        if (w.color === "RED") {
-                            w.color = "BLACK";
-                            x.parent.color = "RED";
-                            this.leftRotate(x.parent);
-                            w = x.parent.right;
-                        }
-
-                        if (w === null) {
-                            break;
-                        }
-
-                        let leftChildIsBlack = w.left === this.NIL || w.left === null || w.left.color === "BLACK";
-                        let rightChildIsBlack = w.right === this.NIL || w.right === null || w.right.color === "BLACK";
-
-                        if (leftChildIsBlack && rightChildIsBlack) {
-                            w.color = "RED";
-                            x = x.parent;
-                        } else {
-                            if (rightChildIsBlack) {
-                                if (w.left !== this.NIL && w.left !== null) {
-                                    w.left.color = "BLACK";
-                                }
-                                w.color = "RED";
-                                this.rightRotate(w);
-                                w = x.parent.right;
-                            }
-
-                            w.color = x.parent.color;
-                            x.parent.color = "BLACK";
-                            if (w.right !== this.NIL && w.right !== null) {
-                                w.right.color = "BLACK";
-                            }
-                            this.leftRotate(x.parent);
-                            x = this.root;
-                        }
+                    // Standard BST search
+                    if (searchNode.value < key) {
+                        searchNode = searchNode.right;
                     } else {
-                        let w = x.parent.left;
-
-                        if (w === null) {
-                            break;
-                        }
-
-                        if (w.color === "RED") {
-                            w.color = "BLACK";
-                            x.parent.color = "RED";
-                            this.rightRotate(x.parent);
-                            w = x.parent.left;
-                        }
-
-                        if (w === null) {
-                            break;
-                        }
-
-                        let leftChildIsBlack = w.left === this.NIL || w.left === null || w.left.color === "BLACK";
-                        let rightChildIsBlack = w.right === this.NIL || w.right === null || w.right.color === "BLACK";
-
-                        if (leftChildIsBlack && rightChildIsBlack) {
-                            w.color = "RED";
-                            x = x.parent;
-                        } else {
-                            if (leftChildIsBlack) {
-                                if (w.right !== this.NIL && w.right !== null) {
-                                    w.right.color = "BLACK";
-                                }
-                                w.color = "RED";
-                                this.leftRotate(w);
-                                w = x.parent.left;
-                            }
-
-                            w.color = x.parent.color;
-                            x.parent.color = "BLACK";
-                            if (w.left !== this.NIL && w.left !== null) {
-                                w.left.color = "BLACK";
-                            }
-                            this.rightRotate(x.parent);
-                            x = this.root;
-                        }
+                        searchNode = searchNode.left;
                     }
                 }
 
-                if (x !== this.NIL && x !== null) {
+                if (z === this.NIL) {
+                    return false; // Node not found
+                }
+
+                this.nodeCount--; // Decrement count only if node found
+                let y = z; // y is the node either removed or moved
+                let yOriginalColor = y.color;
+                let x; // x is the child that replaces y
+
+                if (z.left === this.NIL) {
+                    x = z.right; // x might be NIL
+                    this.transplant(z, z.right);
+                } else if (z.right === this.NIL) {
+                    x = z.left; // x cannot be NIL here (because z.left wasn't NIL)
+                    this.transplant(z, z.left);
+                } else {
+                    // z has two children. Find successor (minimum in right subtree)
+                    y = this.minimum(z.right);
+                    yOriginalColor = y.color;
+                    x = y.right; // Successor's right child (might be NIL)
+
+                    if (y.parent === z) {
+                        // If y is z's direct child, x's parent should point to y after transplant.
+                        // If x is NIL, its parent doesn't matter initially, transplant handles v's parent.
+                        // We only need to explicitly set if x exists and needs its parent updated *before*
+                        // the later transplant of y. In this case, it's simpler: x moves with y.
+                        if (x !== this.NIL) x.parent = y; // Crucial if x becomes child of y directly
+                    } else {
+                        // y is further down. Replace y with its right child first.
+                        this.transplant(y, y.right);
+                        // Attach z's right subtree to y
+                        y.right = z.right;
+                        y.right.parent = y;
+                    }
+                    // Replace z with y
+                    this.transplant(z, y);
+                    // Attach z's left subtree to y
+                    y.left = z.left;
+                    y.left.parent = y;
+                    // Give y z's color
+                    y.color = z.color;
+                }
+
+                // If the node removed (or the node moved into the removed node's place)
+                // was black, the black-height property might be violated.
+                if (yOriginalColor === "BLACK") {
+                    this.fixDelete(x); // Fix starting from the node that replaced y
+                }
+                return true; // Deletion successful
+            }
+
+
+            fixDelete(x) {
+                let s; // sibling
+                // Loop while x is not root AND x is black (double black or red-black)
+                // If x is red-black, the loop terminates after one iteration by setting x to black.
+                // If x is NIL, it's treated as black.
+                while (x !== this.root && (x === this.NIL || x.color === "BLACK")) {
+                    // x must have a parent if it's not the root.
+                    // NIL nodes conceptually have parents in this implementation.
+                    let xParent = x.parent;
+                    if (!xParent || xParent === this.NIL) break; // Should not happen if tree is correct
+
+                    if (x === xParent.left) { // x is left child
+                        s = xParent.right; // Sibling
+
+                        // Case 1: Sibling s is RED
+                        if (s.color === "RED") {
+                            s.color = "BLACK";
+                            xParent.color = "RED";
+                            this.leftRotate(xParent);
+                            s = xParent.right; // New sibling is now black (was s's child)
+                        }
+
+                        // Now sibling s MUST be BLACK (due to Case 1 or initially)
+                        let sLeftIsBlack = (s.left === this.NIL || s.left.color === "BLACK");
+                        let sRightIsBlack = (s.right === this.NIL || s.right.color === "BLACK");
+
+                        // Case 2: Sibling s is BLACK, both s's children are BLACK
+                        if (sLeftIsBlack && sRightIsBlack) {
+                            s.color = "RED"; // Push blackness up to parent
+                            x = xParent; // Move up the tree
+                        } else {
+                            // Case 3: Sibling s is BLACK, s.left is RED, s.right is BLACK (Triangle)
+                            if (sRightIsBlack) {
+                                if (s.left !== this.NIL) s.left.color = "BLACK";
+                                s.color = "RED";
+                                this.rightRotate(s);
+                                s = xParent.right; // New sibling (original s.left)
+                            }
+                            // Case 4: Sibling s is BLACK, s.right is RED (Line)
+                            // Also handles Case 3 after rotation
+                            s.color = xParent.color; // Sibling takes parent's color
+                            xParent.color = "BLACK"; // Parent becomes black
+                            if (s.right !== this.NIL) s.right.color = "BLACK"; // Sibling's red child becomes black
+                            this.leftRotate(xParent); // Rotate parent
+                            x = this.root; // Problem solved, exit loop
+                        }
+                    } else { // x is right child (symmetric cases)
+                        s = xParent.left; // Sibling
+
+                        // Case 1: Sibling s is RED
+                        if (s.color === "RED") {
+                            s.color = "BLACK";
+                            xParent.color = "RED";
+                            this.rightRotate(xParent);
+                            s = xParent.left; // New sibling is now black
+                        }
+
+                        // Now sibling s MUST be BLACK
+                        let sLeftIsBlack = (s.left === this.NIL || s.left.color === "BLACK");
+                        let sRightIsBlack = (s.right === this.NIL || s.right.color === "BLACK");
+
+                        // Case 2: Sibling s is BLACK, both s's children are BLACK
+                        if (sLeftIsBlack && sRightIsBlack) {
+                            s.color = "RED";
+                            x = xParent; // Move up
+                        } else {
+                            // Case 3: Sibling s is BLACK, s.right is RED, s.left is BLACK (Triangle)
+                            if (sLeftIsBlack) {
+                                if (s.right !== this.NIL) s.right.color = "BLACK";
+                                s.color = "RED";
+                                this.leftRotate(s);
+                                s = xParent.left; // New sibling
+                            }
+                            // Case 4: Sibling s is BLACK, s.left is RED (Line)
+                            // Also handles Case 3 after rotation
+                            s.color = xParent.color;
+                            xParent.color = "BLACK";
+                            if (s.left !== this.NIL) s.left.color = "BLACK";
+                            this.rightRotate(xParent);
+                            x = this.root; // Problem solved, exit loop
+                        }
+                    }
+                }
+                // After loop, ensure x (which might be the root or a red node) becomes black
+                if (x !== this.NIL) {
                     x.color = "BLACK";
                 }
             }
 
+
+            delete(value) {
+                return this.deleteNodeHelper(this.root, value);
+            }
+
+
             clear() {
-                this.root = null;
+                this.root = this.NIL;
                 this.nodeCount = 0;
             }
 
@@ -558,319 +578,468 @@
             }
 
             _getHeight(node) {
-                if (node === null || node === this.NIL) {
+                if (node === this.NIL) {
                     return 0;
                 }
+                // Recursively find height
+                let leftHeight = this._getHeight(node.left);
+                let rightHeight = this._getHeight(node.right);
+                return 1 + Math.max(leftHeight, rightHeight);
+            }
 
-                return 1 + Math.max(
-                    this._getHeight(node.left),
-                    this._getHeight(node.right)
-                );
+            find(value) {
+                let current = this.root;
+                while (current !== this.NIL) {
+                    if (value === current.value) {
+                        return current; // Return the actual node
+                    }
+                    if (value < current.value) {
+                        current = current.left;
+                    } else {
+                        current = current.right;
+                    }
+                }
+                return null; // Use null conventionally for 'not found' outside the class
             }
         }
 
-        // Tree Visualization
+
         class TreeVisualizer {
             constructor(svgElement, tree) {
                 this.svg = svgElement;
                 this.tree = tree;
                 this.nodeRadius = 25;
-                this.horizontalSpacing = 40;
-                this.verticalSpacing = 80;
+                this.baseHorizontalSpacing = 30; // Min spacing between nodes
+                this.verticalSpacing = 80;      // Vertical distance between levels
                 this.scale = 1;
                 this.translateX = 0;
                 this.translateY = 0;
                 this.isDragging = false;
                 this.startDragX = 0;
                 this.startDragY = 0;
+                this.contentGroup = null; // Reference to the main <g> element for transformations
 
-                // Initialize drag handling
+                this.svgContainer = svgElement.parentElement; // The div containing the SVG
+
+                // Event Listeners
                 this.svg.addEventListener('mousedown', this.startDrag.bind(this));
                 this.svg.addEventListener('mousemove', this.drag.bind(this));
                 this.svg.addEventListener('mouseup', this.endDrag.bind(this));
                 this.svg.addEventListener('mouseleave', this.endDrag.bind(this));
+                this.svg.addEventListener('wheel', this.handleWheelZoom.bind(this), { passive: false }); // Prevent page scroll
 
-                // Touch events
-                this.svg.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    if (e.touches.length === 1) {
-                        const touch = e.touches[0];
-                        this.startDrag({ clientX: touch.clientX, clientY: touch.clientY });
+                this.svg.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: false }); // Prevent default actions
+                this.svg.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false });
+                this.svg.addEventListener('touchend', this.handleTouchEnd.bind(this));
+                this.svg.addEventListener('touchcancel', this.handleTouchEnd.bind(this));
+
+                // Button Listeners
+                document.getElementById('zoomInBtn').addEventListener('click', () => this.zoom(1.2));
+                document.getElementById('zoomOutBtn').addEventListener('click', () => this.zoom(1 / 1.2));
+                document.getElementById('resetViewBtn').addEventListener('click', () => this.resetView());
+
+                // Resize observer for container to reset view on container resize
+                this.resizeObserver = new ResizeObserver(() => {
+                    // Only reset if the tree isn't empty, avoid resetting on initial load sometimes
+                    if (this.tree.root !== this.tree.NIL || this.contentGroup) {
+                        this.resetView(false); // Reset view without redrawing initially if not needed
                     }
                 });
+                this.resizeObserver.observe(this.svgContainer);
+            }
 
-                this.svg.addEventListener('touchmove', (e) => {
-                    e.preventDefault();
-                    if (e.touches.length === 1 && this.isDragging) {
-                        const touch = e.touches[0];
-                        this.drag({ clientX: touch.clientX, clientY: touch.clientY });
-                    }
-                });
-
-                this.svg.addEventListener('touchend', (e) => {
-                    e.preventDefault();
-                    this.endDrag();
-                });
-
-                this.svg.addEventListener('touchcancel', (e) => {
-                    e.preventDefault();
-                    this.endDrag();
-                });
-
-                // Initialize zoom buttons
-                document.getElementById('zoomInBtn').addEventListener('click', () => {
-                    this.zoomIn();
-                });
-
-                document.getElementById('zoomOutBtn').addEventListener('click', () => {
-                    this.zoomOut();
-                });
-
-                document.getElementById('resetViewBtn').addEventListener('click', () => {
-                    this.resetView();
-                });
+            handleWheelZoom(e) {
+                e.preventDefault(); // Prevent page scroll
+                const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1; // Zoom in on scroll up, out on scroll down
+                this.zoom(zoomFactor);
             }
 
             startDrag(e) {
                 this.isDragging = true;
+                // Use clientX/Y for consistency across mouse/touch
                 this.startDragX = e.clientX;
                 this.startDragY = e.clientY;
+                this.svg.style.cursor = 'grabbing'; // Feedback for dragging
             }
 
             drag(e) {
                 if (!this.isDragging) return;
-
-                const dx = e.clientX - this.startDragX;
-                const dy = e.clientY - this.startDragY;
-
+                const currentX = e.clientX;
+                const currentY = e.clientY;
+                // Calculate delta based on the change since the last move event
+                const dx = currentX - this.startDragX;
+                const dy = currentY - this.startDragY;
+                // Update translation
                 this.translateX += dx;
                 this.translateY += dy;
-
-                this.startDragX = e.clientX;
-                this.startDragY = e.clientY;
-
-                this.updateTransform();
+                // Update the start position for the next drag event
+                this.startDragX = currentX;
+                this.startDragY = currentY;
+                this.updateTransform(); // Apply the new transform
             }
 
             endDrag() {
-                this.isDragging = false;
+                if (this.isDragging) {
+                    this.isDragging = false;
+                    this.svg.style.cursor = 'grab'; // Restore cursor
+                }
             }
 
-            zoomIn() {
-                this.scale = Math.min(3, this.scale * 1.2);
+            // --- Touch Event Handlers ---
+            handleTouchStart(e) {
+                e.preventDefault(); // Prevent screen scrolling, etc.
+                if (e.touches.length === 1) { // Handle single touch for panning
+                    const touch = e.touches[0];
+                    this.startDrag({ clientX: touch.clientX, clientY: touch.clientY }); // Simulate mouse event
+                }
+                // Future: Add pinch-zoom logic for e.touches.length === 2
+            }
+
+            handleTouchMove(e) {
+                e.preventDefault();
+                if (e.touches.length === 1 && this.isDragging) { // Pan only if dragging started
+                    const touch = e.touches[0];
+                    this.drag({ clientX: touch.clientX, clientY: touch.clientY }); // Simulate mouse event
+                }
+            }
+
+            handleTouchEnd(e) {
+                // If panning was occurring, end it
+                this.endDrag();
+            }
+
+
+            zoom(factor) {
+                const newScale = Math.max(0.1, Math.min(5, this.scale * factor)); // Clamp scale
+                // Basic zoom towards center. Could be enhanced to zoom towards mouse/touch point.
+                this.scale = newScale;
                 this.updateTransform();
             }
 
-            zoomOut() {
-                this.scale = Math.max(0.3, this.scale / 1.2);
-                this.updateTransform();
-            }
-
-            resetView() {
+            resetView(shouldRedraw = true) {
+                // Reset scale
                 this.scale = 1;
-                this.translateX = 0;
-                this.translateY = 0;
-                this.updateTransform();
+
+                // Reset translation to roughly center the initial view
+                const containerWidth = this.svgContainer.clientWidth;
+                const containerHeight = this.svgContainer.clientHeight;
+                this.translateX = containerWidth / 2; // Center horizontally
+                this.translateY = this.nodeRadius + 40; // Position near the top vertically
+
+                this.updateTransform(); // Apply reset transform
+
+                // Redraw the tree if requested (usually yes, except sometimes on resize)
+                if (shouldRedraw) {
+                    this.draw();
+                }
             }
+
 
             updateTransform() {
-                const transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
-                const g = this.svg.querySelector('g');
-                if (g) {
-                    g.style.transform = transform;
-                    g.style.transformOrigin = 'center';
+                // Apply the current translation and scale to the content group
+                if (this.contentGroup) {
+                    // Transform origin is top-left (0,0) of the group by default
+                    this.contentGroup.setAttribute('transform', `translate(${this.translateX}, ${this.translateY}) scale(${this.scale})`);
                 }
             }
+
 
             draw() {
-                // Clear existing content
+                // Clear previous drawing
                 this.svg.innerHTML = '';
+                // Create the main group element for transformations
+                this.contentGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                this.svg.appendChild(this.contentGroup);
 
-                // Skip drawing if tree is empty
-                if (this.tree.root === null) {
+                if (this.tree.root === this.tree.NIL) {
+                    this.updateTransform(); // Apply default transform even if empty
+                    // Optionally display a message like "Tree is empty"
                     return;
                 }
 
-                // Get tree height and width
-                const height = this.tree.getHeight();
-                const width = Math.pow(2, height) - 1;
+                // Calculate node positions using a layout algorithm
+                const treeLayout = this.calculateLayout(this.tree.root);
 
-                // Calculate canvas dimensions
-                const svgWidth = Math.max(500, width * (this.nodeRadius * 2 + this.horizontalSpacing));
-                const svgHeight = Math.max(400, height * (this.nodeRadius * 2 + this.verticalSpacing));
+                // Draw nodes and edges recursively based on calculated positions
+                this.drawNodeAndEdges(this.contentGroup, treeLayout.rootPos);
 
-                // Update SVG size if needed
-                this.svg.setAttribute('width', svgWidth);
-                this.svg.setAttribute('height', svgHeight);
-
-                // Create a group for all elements
-                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                this.svg.appendChild(g);
-
-                // Apply current transform
-                g.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
-                g.style.transformOrigin = 'center';
-
-                // Draw tree
-                this._drawTree(g, this.tree.root, svgWidth / 2, this.nodeRadius + 10, svgWidth / 4);
+                // Apply the current view transform (pan/zoom)
+                this.updateTransform();
             }
 
-            _drawTree(g, node, x, y, horizontalOffset) {
-                if (node === null || node === this.tree.NIL) {
-                    return;
+            // Calculates node positions using a simple in-order traversal for X
+            // and depth for Y, then attempts basic centering.
+            // More sophisticated algorithms (e.g., Reingold-Tilford) provide better spacing.
+            calculateLayout(node) {
+                const positions = new Map(); // Map node object to {node, x, y, children:[]}
+                let nextX = 0;
+                let minY = 0, maxY = 0, minX = 0, maxX = 0; // Track bounds
+
+                // First pass: Assign initial X based on in-order traversal, Y based on depth
+                function computeInitialPositions(n, depth) {
+                    if (n === this.tree.NIL) {
+                        return;
+                    }
+
+                    // Recurse left
+                    computeInitialPositions.call(this, n.left, depth + 1);
+
+                    // Assign current node's position
+                    const x = nextX;
+                    const y = depth * this.verticalSpacing;
+                    // Increment X for the next node in the in-order sequence
+                    nextX += (this.nodeRadius * 2 + this.baseHorizontalSpacing);
+
+                    const pos = { node: n, x: x, y: y, children: [], parentPos: null };
+                    positions.set(n, pos);
+
+                    // Update bounds tracking
+                    minY = Math.min(minY, y);
+                    maxY = Math.max(maxY, y);
+                    minX = Math.min(minX, x);
+                    maxX = Math.max(maxX, x);
+
+                    // Recurse right
+                    computeInitialPositions.call(this, n.right, depth + 1);
                 }
 
-                // Draw edges to children
-                if (node.left !== null && node.left !== this.tree.NIL) {
-                    const leftX = x - horizontalOffset;
-                    const leftY = y + this.verticalSpacing;
+                // Second pass: Adjust positions (e.g., center parent over children)
+                // This basic version just connects children; no complex adjustments.
+                function buildHierarchy(pos) {
+                    const n = pos.node;
+                    if (n.left !== this.tree.NIL) {
+                        const leftPos = positions.get(n.left);
+                        if (leftPos) {
+                            pos.children.push(leftPos);
+                            leftPos.parentPos = pos;
+                            buildHierarchy.call(this, leftPos);
+                        }
+                    }
+                    if (n.right !== this.tree.NIL) {
+                        const rightPos = positions.get(n.right);
+                        if (rightPos) {
+                            pos.children.push(rightPos);
+                            rightPos.parentPos = pos;
+                            buildHierarchy.call(this, rightPos);
+                        }
+                    }
+                }
+
+
+                computeInitialPositions.call(this, node, 0); // Start depth 0
+                const rootPos = positions.get(node);
+                if (rootPos) {
+                    buildHierarchy.call(this, rootPos);
+                }
+
+
+                // Basic Centering Adjustment (Optional - can cause overlaps if not careful)
+                // A proper algorithm would handle overlaps. This is simplified.
+                function centerParents(pos) {
+                    if (!pos || pos.children.length === 0) return;
+
+                    pos.children.forEach(centerParents); // Adjust children first (post-order)
+
+                    if (pos.children.length > 0) {
+                        let firstChild = pos.children[0];
+                        let lastChild = pos.children[pos.children.length - 1];
+                        let desiredParentX = (firstChild.x + lastChild.x) / 2;
+                        let currentParentX = pos.x;
+                        let shift = desiredParentX - currentParentX;
+
+                        if (shift !== 0) {
+                            // Shift the parent and its entire subtree rooted at pos
+                            shiftSubtree(pos, shift);
+                        }
+                    }
+                }
+
+                function shiftSubtree(pos, amount) {
+                    if (!pos) return;
+                    pos.x += amount;
+                    // Update bounds after shift
+                    minX = Math.min(minX, pos.x);
+                    maxX = Math.max(maxX, pos.x);
+                    pos.children.forEach(child => shiftSubtree(child, amount));
+                }
+
+                if (rootPos) {
+                    // centerParents(rootPos); // Uncomment to enable basic centering
+                    // Recalculate bounds if centering is enabled
+                    // minX = Infinity; maxX = -Infinity;
+                    // positions.forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); });
+                }
+
+
+                return { rootPos, minX, maxX, minY, maxY }; // Return layout info
+            }
+
+
+            // Recursively draws edges and nodes starting from posData
+            drawNodeAndEdges(group, posData) {
+                if (!posData || !posData.node || posData.node.isNIL) return; // Stop if no data or NIL
+                const { node, x, y, children } = posData;
+
+                // Draw edges to children first (so they are underneath nodes)
+                children.forEach(childPos => {
+                    if (!childPos || childPos.node.isNIL) return; // Don't draw edge to NIL placeholder
 
                     const edge = document.createElementNS("http://www.w3.org/2000/svg", "line");
                     edge.setAttribute('x1', x);
                     edge.setAttribute('y1', y);
-                    edge.setAttribute('x2', leftX);
-                    edge.setAttribute('y2', leftY);
+                    edge.setAttribute('x2', childPos.x);
+                    edge.setAttribute('y2', childPos.y);
                     edge.setAttribute('class', 'edge');
-                    g.appendChild(edge);
+                    group.appendChild(edge);
 
-                    this._drawTree(g, node.left, leftX, leftY, horizontalOffset / 2);
-                }
+                    // Recurse to draw the child subtree
+                    this.drawNodeAndEdges(group, childPos);
+                });
 
-                if (node.right !== null && node.right !== this.tree.NIL) {
-                    const rightX = x + horizontalOffset;
-                    const rightY = y + this.verticalSpacing;
-
-                    const edge = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                    edge.setAttribute('x1', x);
-                    edge.setAttribute('y1', y);
-                    edge.setAttribute('x2', rightX);
-                    edge.setAttribute('y2', rightY);
-                    edge.setAttribute('class', 'edge');
-                    g.appendChild(edge);
-
-                    this._drawTree(g, node.right, rightX, rightY, horizontalOffset / 2);
-                }
-
-                // Draw the node
+                // Draw the current node's circle
                 const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
                 circle.setAttribute('cx', x);
                 circle.setAttribute('cy', y);
                 circle.setAttribute('r', this.nodeRadius);
                 circle.setAttribute('class', `node-${node.color.toLowerCase()}`);
-                g.appendChild(circle);
+                group.appendChild(circle);
 
-                // Draw the value
+                // Draw the current node's value
                 const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
                 text.setAttribute('x', x);
                 text.setAttribute('y', y);
                 text.setAttribute('class', 'node-text');
                 text.textContent = node.value;
-                g.appendChild(text);
+                group.appendChild(text);
             }
 
+
             updateView() {
-                this.draw();
+                this.draw(); // Redraw the tree completely
+            }
+
+            // Clean up resources like observers
+            destroy() {
+                if (this.resizeObserver) {
+                    this.resizeObserver.disconnect();
+                }
+                // Remove other listeners if necessary, though usually handled by page unload
             }
         }
 
-        // App Initialization
+        let visualizer = null; // Make visualizer accessible globally for cleanup/dark mode access
+
         document.addEventListener('DOMContentLoaded', function () {
             const rbTree = new RedBlackTree();
             const svgElement = document.getElementById('rbTreeCanvas');
-            const visualizer = new TreeVisualizer(svgElement, rbTree);
+            visualizer = new TreeVisualizer(svgElement, rbTree); // Assign to global var
             const statusElement = document.getElementById('status');
 
-            // Insert button handler
+            // Helper to show status messages
+            function showStatus(message, isError = false) {
+                statusElement.textContent = message;
+                statusElement.classList.remove('hidden');
+                // Apply error styling if needed
+                statusElement.classList.toggle('text-red-700', isError);
+                statusElement.classList.toggle('dark:text-red-400', isError);
+
+                // Auto-hide after 3 seconds
+                setTimeout(() => {
+                    statusElement.classList.add('hidden');
+                    // Remove error styling when hiding
+                    statusElement.classList.remove('text-red-700', 'dark:text-red-400');
+                }, 3000);
+            }
+
+            // --- Button Event Handlers ---
             document.getElementById('insertBtn').addEventListener('click', function () {
                 const input = document.getElementById('nodeValue');
-                const value = parseInt(input.value);
+                const value = parseInt(input.value.trim()); // Trim whitespace
 
                 if (isNaN(value) || value < 1 || value > 999) {
-                    showStatus('Please enter a valid number between 1 and 999');
+                    showStatus('Please enter a valid integer between 1 and 999', true);
+                    return;
+                }
+                // Check if value already exists using the find method
+                if (rbTree.find(value) !== null) {
+                    showStatus(`Value ${value} already exists in the tree`, true);
+                    input.value = ''; // Clear input even if exists
                     return;
                 }
 
-                rbTree.insert(value);
-                visualizer.updateView();
-                input.value = '';
-
+                rbTree.insert(value); // Insert the value
+                visualizer.updateView(); // Redraw the tree
+                input.value = ''; // Clear input field
                 showStatus(`Inserted ${value}`);
             });
 
-            // Delete button handler
             document.getElementById('deleteBtn').addEventListener('click', function () {
                 const input = document.getElementById('deleteValue');
-                const value = parseInt(input.value);
+                const value = parseInt(input.value.trim());
 
-                if (isNaN(value)) {
-                    showStatus('Please enter a valid number');
+                if (isNaN(value) || value < 1 || value > 999) {
+                    showStatus('Please enter a valid integer between 1 and 999', true);
                     return;
                 }
 
-                const deleted = rbTree.delete(value);
-                visualizer.updateView();
-                input.value = '';
+                const deleted = rbTree.delete(value); // Attempt deletion
+                visualizer.updateView(); // Redraw the tree
+                input.value = ''; // Clear input field
 
                 if (deleted) {
                     showStatus(`Deleted ${value}`);
                 } else {
-                    showStatus(`Value ${value} not found in the tree`);
+                    showStatus(`Value ${value} not found in the tree`, true);
                 }
             });
 
-            // Reset button handler
             document.getElementById('resetBtn').addEventListener('click', function () {
-                rbTree.clear();
-                visualizer.updateView();
-
+                rbTree.clear(); // Clear the data structure
+                visualizer.resetView(); // Reset position and redraw empty tree visualization
                 showStatus('Tree reset');
             });
 
-            // Random tree generator
             document.getElementById('randomTreeBtn').addEventListener('click', function () {
-                rbTree.clear();
-
-                // Generate random number of nodes (5-15)
-                const nodeCount = Math.floor(Math.random() * 11) + 5;
-
-                // Insert random values
-                for (let i = 0; i < nodeCount; i++) {
-                    const value = Math.floor(Math.random() * 100) + 1;
-                    rbTree.insert(value);
+                rbTree.clear(); // Clear existing tree data
+                const nodeCount = Math.floor(Math.random() * 11) + 5; // Generate 5 to 15 nodes
+                const values = new Set(); // Use a Set to ensure unique values
+                // Generate unique random values (1-100 range)
+                while (values.size < nodeCount) {
+                    values.add(Math.floor(Math.random() * 100) + 1);
                 }
 
-                visualizer.updateView();
+                // Insert the generated values into the tree
+                values.forEach(value => rbTree.insert(value));
 
+                visualizer.resetView(); // Reset position and redraw the new tree
                 showStatus(`Generated random tree with ${rbTree.nodeCount} nodes`);
             });
 
-            // Handle Enter key for inputs
+
+            // --- Input Enter Key Listeners ---
             document.getElementById('nodeValue').addEventListener('keyup', function (e) {
                 if (e.key === 'Enter') {
-                    document.getElementById('insertBtn').click();
+                    document.getElementById('insertBtn').click(); // Trigger insert button click
                 }
             });
 
             document.getElementById('deleteValue').addEventListener('keyup', function (e) {
                 if (e.key === 'Enter') {
-                    document.getElementById('deleteBtn').click();
+                    document.getElementById('deleteBtn').click(); // Trigger delete button click
                 }
             });
 
-            // Display status message
-            function showStatus(message) {
-                statusElement.textContent = message;
-                statusElement.classList.remove('hidden');
-
-                // Auto-hide after 3 seconds
-                setTimeout(function () {
-                    statusElement.classList.add('hidden');
-                }, 3000);
-            }
-
-            // Initial empty tree visualization
-            visualizer.updateView();
+            // Initial setup: Reset view (which includes drawing the initial empty state)
+            visualizer.resetView();
         });
+
+        // Cleanup listener for when the window/tab is closed
+        window.addEventListener('unload', () => {
+            if (visualizer) {
+                visualizer.destroy(); // Clean up observer to prevent potential memory leaks
+            }
+        });
+
     </script>
 </body>
 
